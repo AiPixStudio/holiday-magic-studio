@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Modality } from "@google/genai";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GenerationOptions, ReferenceImage } from './types';
 
 // Declare process to avoid TypeScript/Runtime reference errors
@@ -257,7 +257,7 @@ export const generateImage = async (
 
   try {
     // Re-initialize client to pick up latest API key
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenerativeAI(process.env.API_KEY);
     
     const parts: any[] = [];
     
@@ -300,7 +300,7 @@ export const generateImage = async (
 export const analyzeImage = async (imageDataUrl: string, mimeType: string): Promise<string> => {
   const model = 'gemini-2.5-flash';
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenerativeAI(process.env.API_KEY);
     const response = await ai.models.generateContent({
       model: model,
       contents: {
@@ -320,7 +320,7 @@ export const analyzeImage = async (imageDataUrl: string, mimeType: string): Prom
 export const editImage = async (imageDataUrl: string, mimeType: string, prompt: string, referenceImages: ReferenceImage[] = []): Promise<string> => {
     const model = 'gemini-3-pro-image-preview';
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenerativeAI(process.env.API_KEY);
         const parts: any[] = [
             fileToGenerativePart(imageDataUrl, mimeType),
             { text: `Edit this image based on the following instructions: ${prompt}` }
