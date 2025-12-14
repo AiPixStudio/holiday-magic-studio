@@ -1,4 +1,3 @@
-
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { GenerationOptions, ReferenceImage } from './types';
 
@@ -43,8 +42,8 @@ const getStyleDescription = (style: string): string => {
         return `Theme: Classic Wholesome Holiday. Family man aesthetic. ATTIRE: Premium quarter-zip sweater. BACKGROUND: Living room with tree. VIBE: Warm, happy.`;
 
     // --- Christmas Magic ---
-    case 'Santa’s Workshop':
-        return `Theme: Santa Storybook Workshop. Inside Santa’s Workshop. Warm, storybook-style scene. Santa sitting in a large wooden chair.`;
+    case 'Santa's Workshop':
+        return `Theme: Santa Storybook Workshop. Inside Santa's Workshop. Warm, storybook-style scene. Santa sitting in a large wooden chair.`;
     case 'Ivory Elegance':
         return `Theme: Ivory Elegance. Soft, elegant, neutral-toned décor. Cream and gold tree. Dreamy, editorial. (FORENSIC NOTE: Maintain natural skin tones and HAIR colors. Do NOT darken blonde hair to match the cream palette. Keep individual features distinct).`;
     case 'Black Velvet Couture':
@@ -161,35 +160,29 @@ You are generating a scene with a SPECIFIC CAST of characters based on the attac
 You have received ${referenceImageCount} distinct reference images.
 You must generate a scene containing **EXACTLY ${referenceImageCount} HUMAN FIGURES**.
 
-**ANTI-CLONING PROTOCOL:**
-- Do **NOT** generate duplicates of the same person. 
-- Do **NOT** generate "extras" or random background people. 
-- The scene must contain ONLY the ${referenceImageCount} cast members (plus any pets if requested).
-- If you generate 9 people, you have FAILED. If you generate 3 copies of Subject 1, you have FAILED.
+**IDENTITY REPLICATION RULES (CRITICAL):**
+- EACH reference image represents ONE unique individual.
+- You MUST preserve the EXACT facial features, bone structure, eye shape, nose bridge, mouth shape, skin tone, and hair color from each reference.
+- DO NOT beautify, yassify, or idealize the faces. Keep them REAL and RECOGNIZABLE.
+- DO NOT blend features between subjects. Each person must look EXACTLY like their reference.
+- MAINTAIN original bone structure and skin texture. Do not smooth or filter.
 
-**SPATIAL MAPPING (LEFT-TO-RIGHT):**
-Assign the identities in this specific order:
-`;
+**POSITIONING LOGIC:**
+- If there are 2+ people, position them left-to-right in the order the references were provided:
+  - Reference 1 → Figure on the LEFT
+  - Reference 2 → Figure on the RIGHT (or CENTER-LEFT if 3+)
+  - Reference 3+ → Arranged naturally across the frame
 
-  // Explicitly list the mapping for the model
-  if (referenceImageCount > 0) {
-      for (let i = 1; i <= referenceImageCount; i++) {
-        let position = "Center";
-        if (referenceImageCount === 2) {
-             position = i === 1 ? "Left" : "Right";
-        } else if (referenceImageCount >= 3) {
-             if (i === 1) position = "Far Left";
-             else if (i === referenceImageCount) position = "Far Right";
-             else position = "Center/Middle";
-        }
-        prompt += `- **Figure ${i} (${position})**: Must be a forensic match to **[Subject ${i}]**.\n`;
-      }
-  }
+**CLONE DETECTION:**
+- Check: Does any figure look identical to another? If YES → REJECT and retry.
+- Each person must be visually distinct and match ONLY their assigned reference.
 
-  prompt += `\n**IDENTITY & APPEARANCE LOCK:**
-1. **Hair**: If Subject 1 is Blonde, Figure 1 is Blonde. If Subject 2 is Dark-haired, Figure 2 is Dark-haired.
-2. **Face**: Perform a virtual "Face Swap" to graft the reference face onto the generated body.
-3. **Age**: Maintain the age relative to the photo. Do not make adults into children or vice versa.
+**FINAL VERIFICATION CHECKLIST:**
+- Count: Are there exactly ${referenceImageCount} people? 
+- Identity Match: Does Figure 1 (Left) look like Subject 1?
+- Identity Match: Does Figure ${referenceImageCount} (Right/Last) look like Subject ${referenceImageCount}?
+- No Clones: Are all ${referenceImageCount} people visually different from each other?
+
 `;
 
   // --- STRICT LIKENESS INJECTION ---
@@ -245,8 +238,7 @@ export const generateImage = async (
   options: GenerationOptions,
   referenceImages: ReferenceImage[] = []
 ): Promise<string> => {
-  // UPGRADE: Use 'gemini-3-pro-image-preview' for high-fidelity generation
-  const model = 'gemini-3-pro-image-preview';
+  const model = 'gemini-2.0-flash-exp';
   const prompt = buildGeneratorPrompt(options, referenceImages.length);
   
   // Aspect Ratio Handling
@@ -256,16 +248,14 @@ export const generateImage = async (
   }
 
   try {
-    // Re-initialize client to pick up latest API key
-    const ai = new GoogleGenerativeAI(process.env.API_KEY);
+    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+    const generativeModel = genAI.getGenerativeModel({ model: model });
     
     const parts: any[] = [];
     
-    // IMPORTANT: Clearer labeling for "Cast Members"
     if (referenceImages.length > 0) {
         parts.push({ text: "CAST LIST (REFERENCE IMAGES):" });
         referenceImages.forEach((img, index) => {
-            // Explicitly label the image part
             parts.push({ text: `[IMAGE FOR SUBJECT ${index + 1}]:` });
             parts.push(fileToGenerativePart(img.base64, img.mimeType));
         });
@@ -273,23 +263,21 @@ export const generateImage = async (
     
     parts.push({ text: prompt });
 
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: { parts: parts },
-      config: {
-        responseModalities: [Modality.IMAGE],
-        imageConfig: {
-           aspectRatio: ratio,
-           imageSize: "1K" 
+    const result = await generativeModel.generateContent(parts);
+    const response = await result.response;
+    
+    // Check if response has image data
+    if (response.candidates && response.candidates[0]) {
+      const candidate = response.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        for (const part of candidate.content.parts) {
+          if (part.inlineData) {
+            return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+          }
         }
-      },
-    });
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.inlineData) {
-        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
       }
     }
+    
     throw new Error('No image data found in response.');
   } catch (error) {
     console.error('Error generating image:', error);
@@ -298,19 +286,18 @@ export const generateImage = async (
 };
 
 export const analyzeImage = async (imageDataUrl: string, mimeType: string): Promise<string> => {
-  const model = 'gemini-2.5-flash';
+  const model = 'gemini-2.0-flash-exp';
   try {
-    const ai = new GoogleGenerativeAI(process.env.API_KEY);
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: {
-        parts: [
-          fileToGenerativePart(imageDataUrl, mimeType),
-          { text: "Analyze this image and provide a detailed visual description that can be used as a prompt to recreate it or edit it. Focus on style, lighting, setting, clothing, and subject pose." }
-        ]
-      }
-    });
-    return response.text || "No description generated.";
+    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+    const generativeModel = genAI.getGenerativeModel({ model: model });
+    
+    const result = await generativeModel.generateContent([
+      fileToGenerativePart(imageDataUrl, mimeType),
+      { text: "Analyze this image and provide a detailed visual description that can be used as a prompt to recreate it or edit it. Focus on style, lighting, setting, clothing, and subject pose." }
+    ]);
+    
+    const response = await result.response;
+    return response.text() || "No description generated.";
   } catch (error) {
     console.error("Error analyzing image:", error);
     throw new Error("Failed to analyze image.");
@@ -318,34 +305,37 @@ export const analyzeImage = async (imageDataUrl: string, mimeType: string): Prom
 };
 
 export const editImage = async (imageDataUrl: string, mimeType: string, prompt: string, referenceImages: ReferenceImage[] = []): Promise<string> => {
-    const model = 'gemini-3-pro-image-preview';
+    const model = 'gemini-2.0-flash-exp';
     try {
-        const ai = new GoogleGenerativeAI(process.env.API_KEY);
+        const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+        const generativeModel = genAI.getGenerativeModel({ model: model });
+        
         const parts: any[] = [
             fileToGenerativePart(imageDataUrl, mimeType),
             { text: `Edit this image based on the following instructions: ${prompt}` }
         ];
+        
         if (referenceImages && referenceImages.length > 0) {
             parts.push({ text: "Maintain the identity of the following reference subjects in the edited image:" });
             referenceImages.forEach(img => {
                  parts.push(fileToGenerativePart(img.base64, img.mimeType));
             });
         }
-        const response = await ai.models.generateContent({
-            model: model,
-            contents: { parts: parts },
-            config: {
-                responseModalities: [Modality.IMAGE],
-                imageConfig: {
-                   imageSize: "1K" 
-                }
-            }
-        });
-        for (const part of response.candidates[0].content.parts) {
-            if (part.inlineData) {
+        
+        const result = await generativeModel.generateContent(parts);
+        const response = await result.response;
+        
+        if (response.candidates && response.candidates[0]) {
+          const candidate = response.candidates[0];
+          if (candidate.content && candidate.content.parts) {
+            for (const part of candidate.content.parts) {
+              if (part.inlineData) {
                 return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+              }
             }
+          }
         }
+        
         throw new Error('No edited image data returned.');
     } catch (error) {
         console.error("Error editing image:", error);
