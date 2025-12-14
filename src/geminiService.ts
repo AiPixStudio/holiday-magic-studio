@@ -248,7 +248,8 @@ export const generateImage = async (
   }
 
   try {
-    const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+    const apiKey = localStorage.getItem('GOOGLE_API_KEY') || process.env.API_KEY;
+    const genAI = new GoogleGenerativeAI(apiKey);
     const generativeModel = genAI.getGenerativeModel({ model: model });
     
     const parts: any[] = [];
@@ -307,7 +308,9 @@ export const analyzeImage = async (imageDataUrl: string, mimeType: string): Prom
 export const editImage = async (imageDataUrl: string, mimeType: string, prompt: string, referenceImages: ReferenceImage[] = []): Promise<string> => {
     const model = 'gemini-2.0-flash-exp';
     try {
-        const genAI = new GoogleGenerativeAI(process.env.API_KEY);
+        const apiKey = localStorage.getItem('GOOGLE_API_KEY') || process.env.API_KEY;
+        const apiKey = localStorage.getItem('GOOGLE_API_KEY') || process.env.API_KEY;
+        const genAI = new GoogleGenerativeAI(apiKey);
         const generativeModel = genAI.getGenerativeModel({ model: model });
         
         const parts: any[] = [
